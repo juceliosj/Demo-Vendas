@@ -1,0 +1,28 @@
+name: Gerar dados diário
+
+on:
+  schedule:
+    - cron: '0 11 * * *'  # 08h Brasil
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Instalar libs
+        run: pip install -r requirements.txt
+
+      - name: Rodar script
+        run: python gerar_vendas.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
