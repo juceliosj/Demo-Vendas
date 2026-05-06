@@ -2,7 +2,7 @@ import os
 import uuid
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from supabase import create_client
 from dotenv import load_dotenv
 
@@ -18,6 +18,21 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 np.random.seed()
 
 data_hoje = datetime.now().date()
+
+MODO_CARGA_INICIAL = False
+
+if MODO_CARGA_INICIAL:
+    datas = pd.date_range(
+        start="2026-01-01",
+        end=datetime.now().date(),
+        freq="D"
+    )
+else:
+    datas = pd.date_range(
+        start=datetime.now().date(),
+        end=datetime.now().date(),
+        freq="D"
+    )
 
 # =============================
 # CONFIGURAÇÕES
@@ -81,18 +96,34 @@ supabase.table("produtos").upsert(
 # =============================
 # VENDAS
 # =============================
-vendas = pd.DataFrame({
-    "venda_id": [str(uuid.uuid4()) for _ in range(qtd_vendas)],
-    "data_venda": [str(data_hoje)] * qtd_vendas,
-    "cliente_id": np.random.randint(1, 500, qtd_vendas),
-    "loja_id": np.random.choice(lojas["loja_id"], qtd_vendas),
-    "tipo_cliente": np.random.choice(["Atacado", "Varejo"], qtd_vendas, p=[0.3, 0.7]),
-    "produto_id": np.random.choice(produtos["produto_id"], qtd_vendas),
-    "quantidade": np.random.randint(1, 50, qtd_vendas),
-    "desconto": np.round(np.random.uniform(0, 0.3, qtd_vendas), 2),
-    "dias_desde_ultima_compra": np.random.randint(1, 60, qtd_vendas),
-    "inadimplente": np.random.choice([0, 1], qtd_vendas, p=[0.85, 0.15])
-})
+lista_vendas = []
+
+for data_ref in datas:
+
+    vendas_dia = pd.DataFrame({
+        "venda_id": [str(uuid.uuid4()) for _ in range(qtd_vendas)],
+        "data_venda": [str(data_ref.date())] * qtd_vendas,
+        "cliente_id": np.random.randint(1, 500, qtd_vendas),
+        "loja_id": np.random.choice(lojas["loja_id"], qtd_vendas),
+        "tipo_cliente": np.random.choice(
+            ["Atacado", "Varejo"],
+            qtd_vendas,
+            p=[0.3, 0.7]
+        ),
+        "produto_id": np.random.choice(produtos["produto_id"], qtd_vendas),
+        "quantidade": np.random.randint(1, 50, qtd_vendas),
+        "desconto": np.round(np.random.uniform(0, 0.3, qtd_vendas), 2),
+        "dias_desde_ultima_compra": np.random.randint(1, 60, qtd_vendas),
+        "inadimplente": np.random.choice(
+            [0, 1],
+            qtd_vendas,
+            p=[0.85, 0.15]
+        )
+    })
+
+    lista_vendas.append(vendas_dia)
+
+vendas = pd.concat(lista_vendas, ignore_index=True)
 
 vendas = vendas.merge(
     produtos[["produto_id", "preco_base"]],
