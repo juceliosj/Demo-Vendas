@@ -8,6 +8,16 @@ from dotenv import load_dotenv
 
 print("INICIANDO SCRIPT...")
 
+def inserir_em_lotes(tabela, dataframe, tamanho_lote=500):
+    registros = dataframe.to_dict(orient="records")
+
+    for i in range(0, len(registros), tamanho_lote):
+        lote = registros[i:i + tamanho_lote]
+
+        supabase.table(tabela).insert(lote).execute()
+
+        print(f"{tabela}: lote {i // tamanho_lote + 1} inserido com {len(lote)} registros")
+
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -19,11 +29,11 @@ np.random.seed()
 
 data_hoje = datetime.now().date()
 
-MODO_CARGA_INICIAL = False
+MODO_CARGA_INICIAL = True
 
 if MODO_CARGA_INICIAL:
     datas = pd.date_range(
-        start="2026-01-01",
+        start="2024-01-01",
         end=datetime.now().date(),
         freq="D"
     )
@@ -40,8 +50,8 @@ else:
 qtd_produtos = 200
 qtd_lojas = 5
 qtd_fornecedores = 20
-qtd_vendas = 300
-qtd_estoque = 500
+qtd_vendas = 1000
+qtd_estoque = 400
 qtd_quebras = 80
 qtd_pedidos = 120
 
@@ -96,9 +106,58 @@ supabase.table("produtos").upsert(
 # =============================
 # VENDAS
 # =============================
+
+feriados_peso = {
+
+    # ANO NOVO
+    "01-01": 2.0,
+
+    # CARNAVAL
+    "02-16": 2.5,
+    "02-17": 2.5,
+
+    # SEMANA SANTA
+    "04-03": 2.0,
+
+    # DIA DAS MÃES
+    "05-10": 2.2,
+
+    # SÃO JOÃO
+    "06-24": 2.8,
+
+    # DIA DOS PAIS
+    "08-09": 1.8,
+
+    # BLACK FRIDAY
+    "11-27": 3.5,
+
+    # NATAL
+    "12-24": 4.0,
+    "12-25": 4.5,
+
+    # ANO NOVO
+    "12-31": 3.0
+}
+
 lista_vendas = []
 
 for data_ref in datas:
+
+    dia_semana = data_ref.dayofweek
+    mes = data_ref.month
+
+    peso_fim_semana = 1.5 if dia_semana in [5, 6] else 1.0
+
+    data_mes_dia = data_ref.strftime("%m-%d")
+
+    peso_feriado = feriados_peso.get(
+    data_mes_dia,
+    1
+    )
+
+    temperatura = np.random.randint(20, 38)
+
+    peso_clima = 1.4 if temperatura >= 32 else 1.0
 
     vendas_dia = pd.DataFrame({
         "venda_id": [str(uuid.uuid4()) for _ in range(qtd_vendas)],
@@ -108,28 +167,160 @@ for data_ref in datas:
         "tipo_cliente": np.random.choice(
             ["Atacado", "Varejo"],
             qtd_vendas,
-            p=[0.3, 0.7]
+            p=[0.35, 0.65]
         ),
         "produto_id": np.random.choice(produtos["produto_id"], qtd_vendas),
-        "quantidade": np.random.randint(1, 50, qtd_vendas),
         "desconto": np.round(np.random.uniform(0, 0.3, qtd_vendas), 2),
         "dias_desde_ultima_compra": np.random.randint(1, 60, qtd_vendas),
         "inadimplente": np.random.choice(
             [0, 1],
             qtd_vendas,
-            p=[0.85, 0.15]
-        )
+            p=[0.90, 0.10]
+        ),
+        "temperatura": temperatura
     })
+
+    vendas_dia = vendas_dia.merge(
+        produtos,
+        on="produto_id",
+        how="left"
+    )
+
+        # =============================
+    # LOJA PREMIUM VENDE MAIS
+    # =============================
+    vendas_dia["peso_loja"] = np.where(
+        vendas_dia["loja_id"].isin([1, 2]),
+        1.4,   # lojas premium
+        1.0
+    )
+
+    # =============================
+    # PROMOÇÃO AUMENTA DEMANDA
+    # =============================
+    vendas_dia["peso_promocao"] = np.where(
+        vendas_dia["desconto"] >= 0.20,
+        1.6,
+        np.where(
+            vendas_dia["desconto"] >= 0.10,
+            1.3,
+            1.0
+        )
+    )
+
+    # =============================
+    # ATRASO FORNECEDOR GERA RISCO DE RUPTURA
+    # =============================
+    vendas_dia["fornecedor_atrasado"] = np.random.choice(
+        [0, 1],
+        size=len(vendas_dia),
+        p=[0.85, 0.15]
+    )
+
+    vendas_dia["peso_fornecedor"] = np.where(
+        vendas_dia["fornecedor_atrasado"] == 1,
+        0.75,
+        1.0
+    )
+
+    # =============================
+    # RUPTURA REDUZ VENDA
+    # =============================
+    vendas_dia["estoque_simulado"] = np.random.randint(
+        0,
+        300,
+        len(vendas_dia)
+    )
+
+    vendas_dia["estoque_minimo_simulado"] = np.random.randint(
+        20,
+        80,
+        len(vendas_dia)
+    )
+
+    vendas_dia["status_ruptura_simulado"] = np.where(
+        vendas_dia["estoque_simulado"] <= vendas_dia["estoque_minimo_simulado"],
+        1,
+        0
+    )
+
+    vendas_dia["peso_ruptura"] = np.where(
+        vendas_dia["status_ruptura_simulado"] == 1,
+        0.35,  # reduz bastante a venda
+        1.0
+    )
+
+    vendas_dia["peso_categoria"] = 1.0
+
+    vendas_dia.loc[
+        vendas_dia["categoria"] == "Bebidas",
+        "peso_categoria"
+    ] = 1.5
+
+    vendas_dia.loc[
+        vendas_dia["categoria"] == "Alimentos",
+        "peso_categoria"
+    ] = 1.3
+
+    vendas_dia.loc[
+        vendas_dia["categoria"] == "Higiene",
+        "peso_categoria"
+    ] = 1.1
+
+    vendas_dia.loc[
+        vendas_dia["categoria"] == "Limpeza",
+        "peso_categoria"
+    ] = 1.0
+
+    vendas_dia["peso_sazonalidade"] = 1.0
+
+    # Verão: bebidas vendem mais
+    if mes in [1, 2, 12]:
+        vendas_dia.loc[
+            vendas_dia["categoria"] == "Bebidas",
+            "peso_sazonalidade"
+        ] = 1.8
+
+    # São João: alimentos e bebidas vendem mais
+    if mes == 6:
+        vendas_dia.loc[
+            vendas_dia["categoria"].isin(["Alimentos", "Bebidas"]),
+            "peso_sazonalidade"
+        ] = 2.2
+
+    # Black Friday
+    if mes == 11:
+        vendas_dia["peso_sazonalidade"] = 2.5
+
+    # Natal
+    if mes == 12:
+        vendas_dia["peso_sazonalidade"] = 3.0
+
+    vendas_dia["peso_final"] = (
+    peso_fim_semana
+    * peso_feriado
+    * peso_clima
+    * vendas_dia["peso_categoria"]
+    * vendas_dia["peso_sazonalidade"]
+    * vendas_dia["peso_ruptura"]
+    * vendas_dia["peso_promocao"]
+    * vendas_dia["peso_loja"]
+    * vendas_dia["peso_fornecedor"]
+    )
+
+    quantidade_base = np.random.randint(
+        1,
+        30,
+        qtd_vendas
+    )
+
+    vendas_dia["quantidade"] = np.round(
+        quantidade_base * vendas_dia["peso_final"]
+    ).astype(int)
 
     lista_vendas.append(vendas_dia)
 
 vendas = pd.concat(lista_vendas, ignore_index=True)
-
-vendas = vendas.merge(
-    produtos[["produto_id", "preco_base"]],
-    on="produto_id",
-    how="left"
-)
 
 vendas["preco_unitario"] = np.round(
     vendas["preco_base"] * (1 - vendas["desconto"]),
@@ -164,9 +355,7 @@ fato_vendas = vendas[[
     "churn"
 ]]
 
-supabase.table("fato_vendas").insert(
-    fato_vendas.to_dict(orient="records")
-).execute()
+inserir_em_lotes("fato_vendas", fato_vendas, tamanho_lote=500)
 
 # =============================
 # ESTOQUE
@@ -210,9 +399,7 @@ estoque = estoque[[
     "status_ruptura"
 ]]
 
-supabase.table("estoque_produtos").insert(
-    estoque.to_dict(orient="records")
-).execute()
+inserir_em_lotes("estoque_produtos", estoque, tamanho_lote=500)
 
 # =============================
 # QUEBRA
@@ -250,9 +437,7 @@ quebra = quebra[[
     "motivo_quebra"
 ]]
 
-supabase.table("quebra_produtos").insert(
-    quebra.to_dict(orient="records")
-).execute()
+inserir_em_lotes("quebra_produtos", quebra, tamanho_lote=500)
 
 # =============================
 # PEDIDOS
@@ -296,9 +481,7 @@ pedido = pedido[[
     "status_pedido"
 ]]
 
-supabase.table("pedido_produtos").insert(
-    pedido.to_dict(orient="records")
-).execute()
+inserir_em_lotes("pedido_produtos", pedido, tamanho_lote=500)
 
 # =============================
 # RESUMO FINAL
