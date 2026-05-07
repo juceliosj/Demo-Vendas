@@ -33,7 +33,7 @@ MODO_CARGA_INICIAL = True
 
 if MODO_CARGA_INICIAL:
     datas = pd.date_range(
-        start="2024-01-01",
+        start="2026-01-01",
         end=datetime.now().date(),
         freq="D"
     )
