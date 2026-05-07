@@ -29,7 +29,7 @@ np.random.seed()
 
 data_hoje = datetime.now().date()
 
-MODO_CARGA_INICIAL = True
+MODO_CARGA_INICIAL = False
 
 if MODO_CARGA_INICIAL:
     datas = pd.date_range(
