@@ -128,7 +128,7 @@ for data_ref in datas:
     dia_semana = data_ref.dayofweek
     mes = data_ref.month
 
-    peso_fim_semana = 1.15 if dia_semana in [5, 6] else 1.0
+    peso_fim_semana = 1.25 if dia_semana in [5, 6] else 1.0
 
     data_mes_dia = data_ref.strftime("%m-%d")
 
@@ -137,7 +137,14 @@ for data_ref in datas:
     1
     )
 
-    temperatura = np.random.randint(20, 38)
+    if mes in [12, 1, 2]:
+        temperatura = np.random.randint(30, 38)
+
+    elif mes in [6, 7]:
+        temperatura = np.random.randint(22, 28)
+
+    else:
+        temperatura = np.random.randint(26, 33)
 
     peso_clima = 1.10 if temperatura >= 32 else 1.0
 
