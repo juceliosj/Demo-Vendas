@@ -352,6 +352,13 @@ fato_vendas = vendas[[
     "valor_total",
     "dias_desde_ultima_compra",
     "inadimplente",
+    "temperatura",
+    "peso_categoria",
+    "peso_sazonalidade",
+    "peso_promocao",
+    "peso_loja",
+    "peso_ruptura",
+    "peso_fornecedor",
     "churn"
 ]]
 
