@@ -141,13 +141,51 @@ for data_ref in datas:
 
     peso_clima = 1.10 if temperatura >= 32 else 1.0
 
+    # =============================
+    # ESCOLHA DE PRODUTOS POR CONTEXTO
+    # =============================
+
+    if mes in [12, 1, 2]:
+
+        produtos_escolhidos = produtos.sample(
+            qtd_vendas,
+            replace=True,
+            weights=np.where(
+                produtos["categoria"] == "Bebidas",
+                5,
+                1
+            )
+        )["produto_id"].values
+
+    elif mes == 6:
+
+        produtos_escolhidos = produtos.sample(
+            qtd_vendas,
+            replace=True,
+            weights=np.where(
+                produtos["categoria"].isin(
+                    ["Alimentos", "Bebidas"]
+                ),
+                4,
+                1
+            )
+        )["produto_id"].values
+
+    else:
+
+        produtos_escolhidos = produtos.sample(
+            qtd_vendas,
+            replace=True
+        )["produto_id"].values
+
+
     vendas_dia = pd.DataFrame({
         "venda_id": [str(uuid.uuid4()) for _ in range(qtd_vendas)],
         "data_venda": [str(data_ref.date())] * qtd_vendas,
         "cliente_id": np.random.randint(1, 500, qtd_vendas),
         "loja_id": np.random.choice(lojas["loja_id"], qtd_vendas),
         "tipo_cliente": np.random.choice(["Atacado", "Varejo"], qtd_vendas, p=[0.35, 0.65]),
-        "produto_id": np.random.choice(produtos["produto_id"], qtd_vendas),
+        "produto_id": produtos_escolhidos,
         "desconto": np.round(np.random.uniform(0, 0.3, qtd_vendas), 2),
         "dias_desde_ultima_compra": np.random.randint(1, 60, qtd_vendas),
         "inadimplente": np.random.choice([0, 1], qtd_vendas, p=[0.90, 0.10]),
@@ -212,6 +250,14 @@ for data_ref in datas:
         1.0
     )
 
+    # =============================
+    # ATACADO
+    # =============================    
+    vendas_dia["peso_tipo_cliente"] = np.where(
+        vendas_dia["tipo_cliente"] == "Atacado",
+        1.40,
+        1.0
+    )
     # =============================
     # PROMOÇÃO AUMENTA DEMANDA
     # =============================
@@ -328,6 +374,7 @@ for data_ref in datas:
         * vendas_dia["peso_promocao"]
         * vendas_dia["peso_loja"]
         * vendas_dia["peso_fornecedor"]
+        * vendas_dia["peso_tipo_cliente"]
     )
 
     quantidade_base = np.random.randint(
