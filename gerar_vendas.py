@@ -129,7 +129,7 @@ for data_ref in datas:
     mes = data_ref.month
     data_mes_dia = data_ref.strftime("%m-%d")
 
-    peso_fim_semana = 1.25 if dia_semana in [5, 6] else 1.0
+    peso_fim_semana = 1.60 if dia_semana in [5, 6] else 1.0
     peso_feriado = feriados_peso.get(data_mes_dia, 1.0)
 
     if mes in [12, 1, 2]:
@@ -152,7 +152,7 @@ for data_ref in datas:
             replace=True,
             weights=np.where(
                 produtos["categoria"] == "Bebidas",
-                5,
+                15,
                 1
             )
         )["produto_id"].values
@@ -166,7 +166,7 @@ for data_ref in datas:
                 produtos["categoria"].isin(
                     ["Alimentos", "Bebidas"]
                 ),
-                4,
+                10,
                 1
             )
         )["produto_id"].values
@@ -186,7 +186,7 @@ for data_ref in datas:
         "loja_id": np.random.choice(lojas["loja_id"], qtd_vendas),
         "tipo_cliente": np.random.choice(["Atacado", "Varejo"], qtd_vendas, p=[0.35, 0.65]),
         "produto_id": produtos_escolhidos,
-        "desconto": np.round(np.random.uniform(0, 0.3, qtd_vendas), 2),
+        "desconto": np.round(np.random.uniform(0, 0.15, qtd_vendas), 2),
         "dias_desde_ultima_compra": np.random.randint(1, 60, qtd_vendas),
         "inadimplente": np.random.choice([0, 1], qtd_vendas, p=[0.90, 0.10]),
         "temperatura": temperatura
@@ -203,6 +203,23 @@ for data_ref in datas:
     # =============================
     vendas_dia["quantidade_extra"] = 0
 
+    # =============================
+    # CALOR AUMENTA BEBIDAS
+    # =============================
+    if temperatura >= 32:
+
+        mask_calor = vendas_dia["categoria"] == "Bebidas"
+
+        vendas_dia.loc[
+            mask_calor,
+            "quantidade_extra"
+        ] += np.random.randint(
+            10,
+            25,
+            mask_calor.sum()
+        )
+
+    # VERÃO AUMENTA BEBIDAS    
     if mes in [12, 1, 2]:
         mask_bebidas = vendas_dia["categoria"] == "Bebidas"
 
