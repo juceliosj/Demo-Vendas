@@ -108,15 +108,15 @@ supabase.table("produtos").upsert(
 # =============================
 
 feriados_peso = {
-    "01-01": 1.30,  # Ano Novo
-    "02-16": 1.35,  # Carnaval
+    "01-01": 1.30,
+    "02-16": 1.35,
     "02-17": 1.35,
-    "04-03": 1.25,  # Semana Santa
-    "05-10": 1.30,  # Dia das Mães
-    "06-24": 1.40,  # São João
-    "08-09": 1.20,  # Dia dos Pais
-    "11-27": 1.60,  # Black Friday
-    "12-24": 1.60,  # Natal
+    "04-03": 1.25,
+    "05-10": 1.30,
+    "06-24": 1.40,
+    "08-09": 1.20,
+    "11-27": 1.60,
+    "12-24": 1.60,
     "12-25": 1.70,
     "12-31": 1.40
 }
@@ -127,22 +127,15 @@ for data_ref in datas:
 
     dia_semana = data_ref.dayofweek
     mes = data_ref.month
-
-    peso_fim_semana = 1.25 if dia_semana in [5, 6] else 1.0
-
     data_mes_dia = data_ref.strftime("%m-%d")
 
-    peso_feriado = feriados_peso.get(
-    data_mes_dia,
-    1
-    )
+    peso_fim_semana = 1.25 if dia_semana in [5, 6] else 1.0
+    peso_feriado = feriados_peso.get(data_mes_dia, 1.0)
 
     if mes in [12, 1, 2]:
         temperatura = np.random.randint(30, 38)
-
     elif mes in [6, 7]:
         temperatura = np.random.randint(22, 28)
-
     else:
         temperatura = np.random.randint(26, 33)
 
@@ -153,19 +146,11 @@ for data_ref in datas:
         "data_venda": [str(data_ref.date())] * qtd_vendas,
         "cliente_id": np.random.randint(1, 500, qtd_vendas),
         "loja_id": np.random.choice(lojas["loja_id"], qtd_vendas),
-        "tipo_cliente": np.random.choice(
-            ["Atacado", "Varejo"],
-            qtd_vendas,
-            p=[0.35, 0.65]
-        ),
+        "tipo_cliente": np.random.choice(["Atacado", "Varejo"], qtd_vendas, p=[0.35, 0.65]),
         "produto_id": np.random.choice(produtos["produto_id"], qtd_vendas),
         "desconto": np.round(np.random.uniform(0, 0.3, qtd_vendas), 2),
         "dias_desde_ultima_compra": np.random.randint(1, 60, qtd_vendas),
-        "inadimplente": np.random.choice(
-            [0, 1],
-            qtd_vendas,
-            p=[0.90, 0.10]
-        ),
+        "inadimplente": np.random.choice([0, 1], qtd_vendas, p=[0.90, 0.10]),
         "temperatura": temperatura
     })
 
@@ -175,12 +160,55 @@ for data_ref in datas:
         how="left"
     )
 
-        # =============================
+    # =============================
+    # QUANTIDADE EXTRA POR CONTEXTO
+    # =============================
+    vendas_dia["quantidade_extra"] = 0
+
+    if mes in [12, 1, 2]:
+        mask_bebidas = vendas_dia["categoria"] == "Bebidas"
+
+        vendas_dia.loc[
+            mask_bebidas,
+            "quantidade_extra"
+        ] = np.random.randint(
+            5,
+            12,
+            mask_bebidas.sum()
+        )
+
+    if mes == 6:
+        mask_sao_joao = vendas_dia["categoria"].isin(["Alimentos", "Bebidas"])
+
+        vendas_dia.loc[
+            mask_sao_joao,
+            "quantidade_extra"
+        ] += np.random.randint(
+            4,
+            10,
+            mask_sao_joao.sum()
+        )
+
+    if mes == 11:
+        vendas_dia["quantidade_extra"] += np.random.randint(
+            3,
+            8,
+            len(vendas_dia)
+        )
+
+    if mes == 12:
+        vendas_dia["quantidade_extra"] += np.random.randint(
+            5,
+            15,
+            len(vendas_dia)
+        )
+
+    # =============================
     # LOJA PREMIUM VENDE MAIS
     # =============================
     vendas_dia["peso_loja"] = np.where(
         vendas_dia["loja_id"].isin([1, 2]),
-        1.15,   # lojas premium
+        1.15,
         1.0
     )
 
@@ -188,7 +216,8 @@ for data_ref in datas:
     # PROMOÇÃO AUMENTA DEMANDA
     # =============================
     vendas_dia["peso_promocao"] = np.where(
-        vendas_dia["desconto"] >= 0.20, 1.20,
+        vendas_dia["desconto"] >= 0.20,
+        1.20,
         np.where(
             vendas_dia["desconto"] >= 0.10,
             1.10,
@@ -197,7 +226,7 @@ for data_ref in datas:
     )
 
     # =============================
-    # ATRASO FORNECEDOR GERA RISCO DE RUPTURA
+    # ATRASO FORNECEDOR
     # =============================
     vendas_dia["fornecedor_atrasado"] = np.random.choice(
         [0, 1],
@@ -207,7 +236,7 @@ for data_ref in datas:
 
     vendas_dia["peso_fornecedor"] = np.where(
         vendas_dia["fornecedor_atrasado"] == 1,
-        0.75,
+        0.90,
         1.0
     )
 
@@ -234,10 +263,13 @@ for data_ref in datas:
 
     vendas_dia["peso_ruptura"] = np.where(
         vendas_dia["status_ruptura_simulado"] == 1,
-        0.70,  # reduz bastante a venda
+        0.70,
         1.0
     )
 
+    # =============================
+    # PESO POR CATEGORIA
+    # =============================
     vendas_dia["peso_categoria"] = 1.0
 
     vendas_dia.loc[
@@ -260,45 +292,47 @@ for data_ref in datas:
         "peso_categoria"
     ] = 1.0
 
+    # =============================
+    # SAZONALIDADE
+    # =============================
     vendas_dia["peso_sazonalidade"] = 1.0
 
-    # Verão: bebidas vendem mais
     if mes in [1, 2, 12]:
         vendas_dia.loc[
             vendas_dia["categoria"] == "Bebidas",
             "peso_sazonalidade"
         ] = 1.20
 
-    # São João: alimentos e bebidas vendem mais
     if mes == 6:
         vendas_dia.loc[
             vendas_dia["categoria"].isin(["Alimentos", "Bebidas"]),
             "peso_sazonalidade"
         ] = 1.30
 
-    # Black Friday
     if mes == 11:
         vendas_dia["peso_sazonalidade"] = 1.50
 
-    # Natal
     if mes == 12:
         vendas_dia["peso_sazonalidade"] = 1.60
 
+    # =============================
+    # PESO FINAL
+    # =============================
     vendas_dia["peso_final"] = (
-    peso_fim_semana
-    * peso_feriado
-    * peso_clima
-    * vendas_dia["peso_categoria"]
-    * vendas_dia["peso_sazonalidade"]
-    * vendas_dia["peso_ruptura"]
-    * vendas_dia["peso_promocao"]
-    * vendas_dia["peso_loja"]
-    * vendas_dia["peso_fornecedor"]
+        peso_fim_semana
+        * peso_feriado
+        * peso_clima
+        * vendas_dia["peso_categoria"]
+        * vendas_dia["peso_sazonalidade"]
+        * vendas_dia["peso_ruptura"]
+        * vendas_dia["peso_promocao"]
+        * vendas_dia["peso_loja"]
+        * vendas_dia["peso_fornecedor"]
     )
 
     quantidade_base = np.random.randint(
-        1,
-        30,
+        8,
+        15,
         qtd_vendas
     )
 
@@ -309,9 +343,12 @@ for data_ref in datas:
     )
 
     vendas_dia["quantidade"] = np.round(
-        quantidade_base *
-        vendas_dia["peso_final"] *
-        ruido
+        (
+            quantidade_base
+            * vendas_dia["peso_final"]
+            * ruido
+        )
+        + vendas_dia["quantidade_extra"]
     ).astype(int)
 
     vendas_dia["quantidade"] = vendas_dia["quantidade"].clip(lower=1)
@@ -319,6 +356,7 @@ for data_ref in datas:
     lista_vendas.append(vendas_dia)
 
 vendas = pd.concat(lista_vendas, ignore_index=True)
+
 
 vendas["preco_unitario"] = np.round(
     vendas["preco_base"] * (1 - vendas["desconto"]),
