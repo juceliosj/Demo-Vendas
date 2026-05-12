@@ -47,7 +47,7 @@ data_hoje = datetime.now().date()
 # True  = gera histórico desde 01/01/2026 até hoje
 # False = gera somente o dia atual
 # =====================================================
-MODO_CARGA_INICIAL = True
+MODO_CARGA_INICIAL = False
 
 if MODO_CARGA_INICIAL:
     datas = pd.date_range(
